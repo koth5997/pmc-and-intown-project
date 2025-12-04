@@ -2,7 +2,7 @@
 
 > **Notice (보안 안내)**
 > 본 프로젝트는 (주)제일피엠씨 및 (주)인타운과의 산학협력 과제로 수행되었습니다.
-> 기업의 기술 보안 및 데이터 기밀 유지 협약(NDA)을 준수하기 위해, **실제 소스 코드와 원본 데이터셋은 공개하지 않으며**
+> 기업의 기술 보안 및 데이터 기밀 유지 협약(NDA)을 준수하기 위해, **원본 데이터셋은 공개하지 않으며** 제가 한 일부코드만 넣었습니다.
 > 대신 **시스템 아키텍처, 핵심 알고리즘 설명, 그리고 최종 성과(시각화)**를 중심으로 기술합니다.
 
 ---
@@ -10,30 +10,64 @@
 ## 1.프로젝트 개요
 제조 현장의 MCT 설비에서 수집되는 **고빈도 시계열 센서 데이터(전류, 진동)**를 분석하여, 공구의 마모 상태를 실시간으로 탐지하는 AI 모델을 개발했습니다. 라벨링 데이터가 부족한 현장 특성을 고려하여 **비지도 학습(Unsupervised Learning)** 기반의 이상 탐지 방법론을 적용했습니다.
 
-* **Role:** AI Modeling Lead (모델 설계, 학습, 최적화 전담)
-* **Tech Stack:** Python, TensorFlow(Keras), LSTM, Autoencoder
+## 2. 기술 스택
+- Python 3.x  
+- Pandas, NumPy  
+- Scikit-learn  
+- TensorFlow / Keras  
+- Matplotlib, Seaborn  
 
 ---
 
-## 2.핵심 기술 및 로직
+## 3. 주요 기능 요약
+1. CSV 데이터 로드 및 결측치 처리  
+2. 필요 없는 컬럼 제거  
+3. MinMaxScaler 기반 정규화  
+4. 시계열 입력을 위한 Window Sequence 생성  
+5. LSTM Autoencoder 모델 정의 및 학습  
+6. Reconstruction Error 기반 이상(anomaly) 탐지  
+7. 그래프 시각화
 
-코드를 공개할 수 없는 대신, 제가 직접 설계하고 구현한 핵심 로직을 상세히 설명합니다.
+## 4. 데이터 처리 과정 (Preprocessing)
+```python
+df = df.drop(columns=available_drops)
+df = df.ffill().bfill()
+scaler = MinMaxScaler()
+train_scaled = scaler.fit_transform(train_df)
+test_scaled = scaler.transform(test_df)
+```
+## 5.LSTM Autoencoder 모델 구조
+```
+model = Sequential([
+    Input(shape=(WINDOW_SIZE, n_features)),
+    LSTM(64, activation='relu', return_sequences=False),
+    Dropout(0.2),
+    RepeatVector(WINDOW_SIZE),
+    LSTM(64, activation='relu', return_sequences=True),
+    Dropout(0.2),
+    TimeDistributed(Dense(n_features))
+])
+```
+Encoder: LSTM(64)
+Bottleneck: RepeatVector
+Decoder: LSTM(64)
+Output: TimeDistributed(Dense)
+손실 함수: MSE
+EarlyStopping 사용
 
-### A. LSTM Autoencoder Modeling
-시계열 데이터의 '정상 패턴'을 학습하여, 이 패턴에서 벗어나는 정도(Reconstruction Error)를 측정하는 방식을 사용했습니다.
+## 6.이상 탐지 방식
+학습 데이터 Reconstruction Error 계산
+평균 + 2×표준편차로 임계값(threshold) 설정
+Test 데이터의 Reconstruction Error가 threshold를 초과하면 이상치로 판단
+```
+threshold = np.mean(train_mae_loss) + 2 * np.std(train_mae_loss)
+anomalies = test_mae_loss > threshold
+```
+## 8. 코드 전체 흐름
+```
+데이터 로드 → 컬럼 정리 → 결측치 처리 
+→ Train/Test 분리 → 정규화 → 시퀀스 생성
+→ LSTM Autoencoder 학습 → Reconstruction Error 계산
+→ Threshold 설정 → 이상 탐지 및 시각화
+```
 
-* **Encoder:** 시계열 입력($t_1 \dots t_n$)을 받아 압축된 Latent Vector로 변환 (LSTM Layer 사용)
-* **Decoder:** 압축된 정보를 다시 원래의 시계열로 복원
-* **Thresholding:** 정상 데이터의 복원 오차 분포(Distribution)를 분석하여 이상 탐지 임계값 설정
-
-### B.전처리 파이프라인
-현장 데이터의 노이즈를 제거하기 위해 다음과 같은 전처리를 적용했습니다.
-* **High Pass Filter:** 설비 자체 진동에 의한 저주파 노이즈 제거
-* **STFT (Short-Time Fourier Transform):** 시간-주파수 도메인 특징 추출
-* **Sliding Window:** 실시간 스트리밍 데이터를 모델 입력 시퀀스로 변환
-
----
-
-## 4.배운 점
-* **데이터 관점:** 실제 제조 데이터의 불균형(Imbalance) 문제를 해결하기 위해 정상 데이터만으로 학습하는 오토인코더 방식을 채택하여 유효성을 입증했습니다.
-* **엔지니어링 관점:** 단순 모델링을 넘어, 노이즈 필터링부터 시각화 연동까지 전체 데이터 파이프라인의 흐름을 이해하는 계기가 되었습니다.
